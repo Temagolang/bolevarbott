@@ -230,13 +230,34 @@ async def skip_model(callback: CallbackQuery, state: FSMContext):
 
 async def show_condition_type_selection(callback: CallbackQuery, state: FSMContext):
     """Показывает выбор типа ценового условия."""
+    # Получаем floor для справки
+    data = await state.get_data()
+    collection_name = data.get("collection_name")
+    model = data.get("model")
+
+    api = get_mock_api()
+    floor_info = ""
+    try:
+        floors_data = await api.filterFloors(gift_name=collection_name)
+        models = floors_data.get("models", {})
+
+        if model and model in models:
+            floor_price = models[model]
+            floor_info = f"\n💎 Floor для {model}: **{floor_price} TON**\n"
+        elif models:
+            avg_floor = sum(models.values()) / len(models)
+            floor_info = f"\n💎 Средний floor коллекции: **{avg_floor:.1f} TON**\n"
+    except Exception as e:
+        logger.error(f"Error getting floor: {e}")
+
     text = (
-        "Как будем задавать условие по цене?\n\n"
+        "Как будем задавать условие по цене?"
+        f"{floor_info}\n"
         "1️⃣ Фиксированная цена (≤ X TON)\n"
         "2️⃣ Скидка к floor (ниже пола на X%)"
     )
 
-    await callback.message.edit_text(text, reply_markup=get_condition_type_keyboard())
+    await callback.message.edit_text(text, reply_markup=get_condition_type_keyboard(), parse_mode="Markdown")
     await callback.answer()
 
 

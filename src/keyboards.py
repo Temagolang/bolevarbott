@@ -40,6 +40,7 @@ def get_condition_type_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="≤ Фиксированная цена", callback_data="condition:fixed_price")],
             [InlineKeyboardButton(text="↓ Ниже floor на %", callback_data="condition:floor_discount")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="add:back_to_model")],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:main")],
         ]
     )
 
@@ -59,6 +60,7 @@ def get_rule_actions_keyboard(rule_id: int, is_active: bool) -> InlineKeyboardMa
             [InlineKeyboardButton(text=pause_text, callback_data=f"rule:toggle:{rule_id}")],
             [InlineKeyboardButton(text="🗑 Удалить", callback_data=f"rule:delete_confirm:{rule_id}")],
             [InlineKeyboardButton(text="⬅️ Назад к списку", callback_data="menu:my_trackings")],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:main")],
         ]
     )
 
@@ -71,6 +73,7 @@ def get_delete_confirmation_keyboard(rule_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"rule:delete:{rule_id}"),
                 InlineKeyboardButton(text="❌ Отмена", callback_data=f"rule:view:{rule_id}"),
             ],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:main")],
         ]
     )
 
@@ -82,6 +85,7 @@ def get_model_selection_keyboard(back_callback: str = "add:skip_model") -> Inlin
             [InlineKeyboardButton(text="Выбрать из списка", callback_data="add:select_model")],
             [InlineKeyboardButton(text="Пропустить", callback_data="add:skip_model")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback)],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:main")],
         ]
     )
 
@@ -103,6 +107,7 @@ def get_rule_created_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="📋 Мои отслеживания", callback_data="menu:my_trackings")],
             [InlineKeyboardButton(text="➕ Добавить ещё", callback_data="menu:add_tracking")],
+            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:main")],
         ]
     )
 
@@ -121,5 +126,6 @@ def get_alert_keyboard(lot_url: str, rule_id: int) -> InlineKeyboardMarkup:
         buttons.append([InlineKeyboardButton(text="🔗 Открыть в Portals", url=lot_url)])
 
     buttons.append([InlineKeyboardButton(text="📋 Открыть правило", callback_data=f"rule:view:{rule_id}")])
+    buttons.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:main")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)

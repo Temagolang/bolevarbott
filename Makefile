@@ -30,9 +30,11 @@ db-stop: ## Остановить базу данных
 db-logs: ## Показать логи базы данных
 	docker-compose logs -f postgres
 
-run: db-up ## Запустить весь проект (БД + бот)
-	@echo "$(GREEN)Запуск бота...$(NC)"
-	python main.py
+run: ## Запустить весь проект (БД + бот) в Docker
+	@echo "$(GREEN)Запуск проекта в Docker...$(NC)"
+	docker-compose up -d
+	@echo "$(GREEN)✓ Проект запущен в Docker$(NC)"
+	@echo "$(YELLOW)Смотри логи: make logs$(NC)"
 
 run-dev: db-up ## Запустить в режиме разработки с автоперезагрузкой
 	@echo "$(GREEN)Запуск бота в режиме разработки...$(NC)"
