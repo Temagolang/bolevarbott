@@ -1,0 +1,62 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+
+# Virtual environments
+venv/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite3
+
+# Telegram sessions
+*.session
+*.session-journal
+
+# macOS
+.DS_Store
+
+# Documentation (already in image)
+*.md
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Tests
+tests/
+.pytest_cache/
+.coverage
+
+# Other
+.mypy_cache/
+.ruff_cache/
