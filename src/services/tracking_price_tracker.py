@@ -183,7 +183,7 @@ class TrackingPriceTracker:
         try:
             # Создаём объект Alert
             lot_floor_price = models_floors.get(lot["model"], lot.get("floor_price", 0))
-            lot_url = f"https://t.me/portals/market?startapp=gift_{lot['id']}"
+            lot_url = f"https://t.me/portals?startapp=gift-{lot['id']}"
 
             alert = Alert(
                 rule_id=rule.rule_id,

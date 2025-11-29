@@ -109,7 +109,7 @@ async def process_collection_query(message: Message, state: FSMContext):
 
         for idx, coll in enumerate(matching[:10], 1):  # Максимум 10
             text += f"{idx}️⃣ {coll['name']}\n"
-            text += f"   Floor: {coll['floor_price']} TON\n"
+            text += f"   Floor: {coll['floor_price']} TON (мин. цена)\n"
             text += f"   Объём 24ч: {coll['volume_24h']} TON\n\n"
 
             buttons.append([
@@ -261,13 +261,42 @@ async def condition_floor_discount(callback: CallbackQuery, state: FSMContext):
     """Настройка скидки от floor."""
     await state.update_data(condition_type=ConditionType.FLOOR_DISCOUNT)
 
+    # Получаем данные для показа текущего floor
+    data = await state.get_data()
+    collection_name = data.get("collection_name")
+    model = data.get("model")
+
+    # Получаем floor через API
+    api = get_mock_api()
+    try:
+        floors_data = await api.filterFloors(gift_name=collection_name)
+        models = floors_data.get("models", {})
+
+        if model and model in models:
+            floor_price = models[model]
+            floor_info = f"\n💎 Текущий floor для {model}: **{floor_price} TON**\n"
+            example_calc = f"Пример: при 10% → цена ≤ {floor_price * 0.9:.1f} TON"
+        elif models:
+            # Средний floor если модель не выбрана
+            avg_floor = sum(models.values()) / len(models)
+            floor_info = f"\n💎 Средний floor коллекции: **{avg_floor:.1f} TON**\n"
+            example_calc = f"Пример: при 10% → цена ≤ {avg_floor * 0.9:.1f} TON"
+        else:
+            floor_info = ""
+            example_calc = "Пример: при 10% → цена будет на 10% ниже floor"
+    except Exception as e:
+        logger.error(f"Error getting floor: {e}")
+        floor_info = ""
+        example_calc = "Пример: при 10% → цена будет на 10% ниже floor"
+
     text = (
-        "📉 Скидка от floor\n\n"
+        "📉 Скидка от floor\n"
+        f"{floor_info}\n"
         "Введи процент, на который цена должна быть ниже floor.\n\n"
-        "Например: `10` (это значит: цена ≤ floor − 10%)"
+        f"{example_calc}"
     )
 
-    await callback.message.edit_text(text)
+    await callback.message.edit_text(text, parse_mode="Markdown")
     await state.set_state(AddTracking.waiting_floor_discount)
     await callback.answer()
 

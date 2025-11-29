@@ -73,7 +73,7 @@ async def add_model(message: Message, state: FSMContext):
                     [
                         InlineKeyboardButton(
                             text="Открыть в Portals",
-                            url=f"https://t.me/portals/market?startapp=gift_{gift.gift_id}",
+                            url=f"https://t.me/portals?startapp=gift-{gift.gift_id}",
                         )
                     ]
                 ]

@@ -83,7 +83,7 @@ class PriceTracker:
                     [
                         InlineKeyboardButton(
                             text="Открыть в Portals",
-                            url=f"https://t.me/portals/market?startapp=gift_{new_gift.gift_id}",
+                            url=f"https://t.me/portals?startapp=gift-{new_gift.gift_id}",
                         )
                     ]
                 ]
