@@ -29,6 +29,9 @@ services:
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
+    volumes:
+      # Монтируем файл сессии Pyrogram (важно для авторизации в Portals API)
+      - ./account.session:/app/account.session:ro
     depends_on:
       postgres:
         condition: service_healthy
