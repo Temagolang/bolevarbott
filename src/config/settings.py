@@ -43,11 +43,12 @@ class Settings:
         allowed_users_str = os.getenv("ALLOWED_USERS", "")
         allowed_users = [u.strip() for u in allowed_users_str.split(",") if u.strip()] if allowed_users_str else []
 
-        # Создаём группы пользователей (пока хардкод для FCK_HOTLINE и maggmogg)
-        # В будущем можно вынести в .env как USER_GROUPS=group1:user1,user2;group2:user3
+        # Создаём группы пользователей с user_id
+        # user_id для maggmogg = 256986671 (из БД)
+        # user_id для FCK_HOTLINE нужно узнать когда он напишет боту
         user_groups = {
-            "FCK_HOTLINE": "team1",
-            "maggmogg": "team1",
+            "FCK_HOTLINE": {"group_id": "team1", "user_ids": [256986671]},  # Пока только maggmogg
+            "maggmogg": {"group_id": "team1", "user_ids": [256986671]},
         }
 
         return cls(
@@ -67,9 +68,9 @@ class Settings:
 
     def get_user_group(self, username: str) -> Optional[str]:
         """Возвращает ID группы пользователя или None."""
-        if not self.user_groups:
+        if not self.user_groups or username not in self.user_groups:
             return None
-        return self.user_groups.get(username)
+        return self.user_groups[username].get("group_id")
 
     def get_group_members(self, username: str) -> list[str]:
         """Возвращает всех пользователей из группы данного пользователя."""
@@ -78,7 +79,15 @@ class Settings:
             return [username]  # Если нет группы, возвращаем только себя
 
         # Находим всех пользователей с таким же group_id
-        return [user for user, gid in self.user_groups.items() if gid == group_id]
+        return [user for user, info in self.user_groups.items() if info.get("group_id") == group_id]
+
+    def get_group_user_ids(self, username: str) -> list[int]:
+        """Возвращает список user_id всех членов группы."""
+        if not self.user_groups or username not in self.user_groups:
+            return []
+
+        user_info = self.user_groups[username]
+        return user_info.get("user_ids", [])
 
 
 _settings: Optional[Settings] = None

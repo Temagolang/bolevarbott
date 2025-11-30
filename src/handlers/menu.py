@@ -12,7 +12,7 @@ from src.keyboards import (
     get_delete_confirmation_keyboard,
 )
 from src.repositories import TrackingRuleRepository, AlertRepository
-from src.services.user_cache import get_user_cache
+from src.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -86,20 +86,20 @@ async def show_my_trackings(user_id: int, username: str, message: Message, callb
         callback: Объект callback (если вызов через inline кнопку)
     """
     rule_repo = TrackingRuleRepository()
-    user_cache = get_user_cache()
+    settings = get_settings()
 
     try:
-        # Получаем user_id всех членов группы
-        group_user_ids = user_cache.get_group_user_ids(username) if username else [user_id]
+        # Получаем user_id всех членов группы напрямую из settings
+        group_user_ids = settings.get_group_user_ids(username) if username else []
 
-        # Если кэш пуст - используем текущего пользователя
+        # Если нет данных в settings - используем только текущего пользователя
         if not group_user_ids:
             group_user_ids = [user_id]
         elif user_id not in group_user_ids:
-            # Убедимся что текущий пользователь в списке
+            # Добавляем текущего пользователя если его нет
             group_user_ids.append(user_id)
 
-        # Получаем правила всей группы
+        # Получаем правила для всех user_id группы
         rules = await rule_repo.get_by_user_ids(group_user_ids)
 
         if not rules:

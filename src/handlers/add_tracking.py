@@ -54,97 +54,41 @@ async def search_by_collection(callback: CallbackQuery, state: FSMContext):
         "Введи название коллекции (например: `Toy Bear`, `Pumpkin Cat`):"
     )
 
-    await state.update_data(search_type="collection")
     await callback.message.edit_text(text, parse_mode="Markdown")
-    await state.set_state(AddTracking.waiting_collection_query)
-    await callback.answer()
-
-
-@router.callback_query(F.data == "search:by_name")
-async def search_by_name(callback: CallbackQuery, state: FSMContext):
-    """Поиск по имени подарка."""
-    text = (
-        "🔍 Поиск по имени подарка\n\n"
-        "Введи название подарка (или часть имени):"
-    )
-
-    await state.update_data(search_type="name")
-    await callback.message.edit_text(text)
     await state.set_state(AddTracking.waiting_collection_query)
     await callback.answer()
 
 
 @router.message(AddTracking.waiting_collection_query)
 async def process_collection_query(message: Message, state: FSMContext):
-    """Обработка запроса коллекции или подарка."""
+    """Обработка запроса коллекции."""
     query = message.text.strip()
-
-    # Получаем тип поиска из state
-    data = await state.get_data()
-    search_type = data.get("search_type", "collection")
 
     bot = message.bot
     api = getattr(bot, "portals_service", None) or PortalsService()
 
     try:
-        if search_type == "name":
-            # Поиск по имени подарка через search API
-            logger.info(f"Searching gifts by name: '{query}'")
+        # Поиск по коллекции
+        logger.info(f"Searching collections by name: '{query}'")
+        collections = await api.collections(limit=100)
 
-            # Ищем лоты с этим именем
-            lots = await api.search(
-                gift_name=query,
-                limit=50,  # Берем больше лотов для группировки
-                sort="price_asc"
-            )
+        logger.info(f"Got {len(collections)} collections from API")
+        if collections:
+            logger.info(f"First collection example: {collections[0]}")
 
-            logger.info(f"Found {len(lots)} lots for query '{query}'")
+        # Фильтруем по запросу пользователя
+        matching = [
+            c for c in collections
+            if query.lower() in c["name"].lower()
+        ]
 
-            if not lots:
-                await message.answer(
-                    f"❌ Подарки с названием '{query}' не найдены.\n\n"
-                    "Попробуй другое название или используй /start чтобы начать заново."
-                )
-                await state.clear()
-                return
-
-            # Группируем лоты по коллекциям (уникальные имена)
-            collections_map = {}
-            for lot in lots:
-                coll_name = lot.get("name", "")
-                if coll_name and coll_name not in collections_map:
-                    collections_map[coll_name] = {
-                        "name": coll_name,
-                        "floor_price": lot.get("floor_price", "N/A"),
-                        "price": lot.get("price", "N/A"),
-                    }
-
-            matching = list(collections_map.values())
-            logger.info(f"Grouped into {len(matching)} unique collections")
-
-        else:
-            # Поиск по коллекции (старая логика)
-            logger.info(f"Searching collections by name: '{query}'")
-            collections = await api.collections(limit=100)
-
-            logger.info(f"Got {len(collections)} collections from API")
-            if collections:
-                logger.info(f"First collection example: {collections[0]}")
-
-            # Фильтруем по запросу пользователя
-            matching = [
-                c for c in collections
-                if query.lower() in c["name"].lower()
-            ]
-
-            logger.info(f"Query '{query}' matched {len(matching)} collections")
-            if matching:
-                logger.info(f"Matched collections: {[c['name'] for c in matching[:5]]}")
+        logger.info(f"Query '{query}' matched {len(matching)} collections")
+        if matching:
+            logger.info(f"Matched collections: {[c['name'] for c in matching[:5]]}")
 
         if not matching:
-            search_obj = "подарки" if search_type == "name" else "коллекции"
             await message.answer(
-                f"❌ {search_obj.capitalize()} с названием '{query}' не найдены.\n\n"
+                f"❌ Коллекции с названием '{query}' не найдены.\n\n"
                 "Попробуй другое название или используй /start чтобы начать заново."
             )
             await state.clear()
@@ -157,8 +101,7 @@ async def process_collection_query(message: Message, state: FSMContext):
         )
 
         # Показываем найденные коллекции
-        search_obj = "подарки" if search_type == "name" else "коллекции"
-        text = f"Найдены {search_obj}:\n\n"
+        text = "Найдены коллекции:\n\n"
         buttons = []
 
         for idx, coll in enumerate(matching[:10], 1):  # Максимум 10
@@ -167,10 +110,8 @@ async def process_collection_query(message: Message, state: FSMContext):
             floor_price = coll.get('floor_price', 'N/A')
             text += f"   Floor: {floor_price} TON (мин. цена)\n"
 
-            if search_type == "collection":
-                day_volume = coll.get('day_volume', coll.get('volume_24h', '0'))
-                text += f"   Объём 24ч: {day_volume} TON\n"
-
+            day_volume = coll.get('day_volume', coll.get('volume_24h', '0'))
+            text += f"   Объём 24ч: {day_volume} TON\n"
             text += "\n"
 
             buttons.append([
