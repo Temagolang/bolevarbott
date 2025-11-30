@@ -16,7 +16,7 @@ from src.keyboards import (
 )
 from src.models import TrackingRule, ConditionType
 from src.repositories import TrackingRuleRepository
-from src.services.portals_api_mock import get_mock_api
+from src.services.portals_service import PortalsService
 
 logger = logging.getLogger(__name__)
 
@@ -77,17 +77,28 @@ async def process_collection_query(message: Message, state: FSMContext):
     """Обработка запроса коллекции."""
     query = message.text.strip()
 
-    # Получаем доступные коллекции через mock API
-    api = get_mock_api()
+    # Получаем доступные коллекции через API
+    bot = message.bot
+    api = getattr(bot, "portals_service", None) or PortalsService()
 
     try:
         collections = await api.collections(limit=100)
+
+        # DEBUG: Логируем что получили
+        logger.info(f"Got {len(collections)} collections from API")
+        if collections:
+            logger.info(f"First collection example: {collections[0]}")
 
         # Фильтруем по запросу пользователя
         matching = [
             c for c in collections
             if query.lower() in c["name"].lower()
         ]
+
+        # DEBUG: Логируем результаты поиска
+        logger.info(f"Query '{query}' matched {len(matching)} collections")
+        if matching:
+            logger.info(f"Matched collections: {[c['name'] for c in matching[:5]]}")
 
         if not matching:
             await message.answer(
@@ -109,8 +120,10 @@ async def process_collection_query(message: Message, state: FSMContext):
 
         for idx, coll in enumerate(matching[:10], 1):  # Максимум 10
             text += f"{idx}️⃣ {coll['name']}\n"
-            text += f"   Floor: {coll['floor_price']} TON (мин. цена)\n"
-            text += f"   Объём 24ч: {coll['volume_24h']} TON\n\n"
+            text += f"   Floor: {coll.get('floor_price', 'N/A')} TON (мин. цена)\n"
+
+            day_volume = coll.get('day_volume', coll.get('volume_24h', '0'))
+            text += f"   Объём 24ч: {day_volume} TON\n\n"
 
             buttons.append([
                 InlineKeyboardButton(
@@ -174,7 +187,8 @@ async def select_model_from_list(callback: CallbackQuery, state: FSMContext):
         return
 
     # Получаем модели через API
-    api = get_mock_api()
+    bot = callback.bot
+    api = getattr(bot, "portals_service", None) or PortalsService()
 
     try:
         floors_data = await api.filterFloors(gift_name=collection_name)
@@ -235,7 +249,8 @@ async def show_condition_type_selection(callback: CallbackQuery, state: FSMConte
     collection_name = data.get("collection_name")
     model = data.get("model")
 
-    api = get_mock_api()
+    bot = callback.bot
+    api = getattr(bot, "portals_service", None) or PortalsService()
     floor_info = ""
     try:
         floors_data = await api.filterFloors(gift_name=collection_name)
@@ -288,7 +303,8 @@ async def condition_floor_discount(callback: CallbackQuery, state: FSMContext):
     model = data.get("model")
 
     # Получаем floor через API
-    api = get_mock_api()
+    bot = callback.bot
+    api = getattr(bot, "portals_service", None) or PortalsService()
     try:
         floors_data = await api.filterFloors(gift_name=collection_name)
         models = floors_data.get("models", {})

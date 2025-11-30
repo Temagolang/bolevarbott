@@ -35,6 +35,11 @@ async def cmd_start(message: Message):
 @router.callback_query(F.data == "menu:main")
 async def menu_main(callback: CallbackQuery):
     """Возврат в главное меню."""
+    # ПРИОРИТЕТ ИНТЕРФЕЙСА: ставим алерты на паузу, когда пользователь работает с меню
+    bot = callback.bot
+    if hasattr(bot, 'tracking_tracker'):
+        bot.tracking_tracker.pause_user_alerts(callback.from_user.id)
+
     text = (
         "Привет! Я бот для отслеживания лотов на Portals Marketplace.\n\n"
         "Я могу:\n"
@@ -43,7 +48,12 @@ async def menu_main(callback: CallbackQuery):
         "Что делаем?"
     )
 
-    await callback.message.edit_text(text, reply_markup=get_main_menu_keyboard())
+    # Всегда отправляем новое сообщение - так меню не перекроется алертами
+    await bot.send_message(
+        chat_id=callback.from_user.id,
+        text=text,
+        reply_markup=get_main_menu_keyboard()
+    )
     await callback.answer()
 
 
@@ -56,6 +66,11 @@ async def cmd_my_trackings(message: Message):
 @router.callback_query(F.data == "menu:my_trackings")
 async def menu_my_trackings(callback: CallbackQuery):
     """Callback для показа списка правил."""
+    # ПРИОРИТЕТ ИНТЕРФЕЙСА: ставим алерты на паузу
+    bot = callback.bot
+    if hasattr(bot, 'tracking_tracker'):
+        bot.tracking_tracker.pause_user_alerts(callback.from_user.id)
+
     await show_my_trackings(callback.from_user.id, callback.message, callback)
 
 
@@ -140,6 +155,11 @@ async def show_my_trackings(user_id: int, message: Message, callback: CallbackQu
 @router.callback_query(F.data.startswith("rule:view:"))
 async def rule_view(callback: CallbackQuery):
     """Показ деталей правила."""
+    # ПРИОРИТЕТ ИНТЕРФЕЙСА: ставим алерты на паузу
+    bot = callback.bot
+    if hasattr(bot, 'tracking_tracker'):
+        bot.tracking_tracker.pause_user_alerts(callback.from_user.id)
+
     rule_id = int(callback.data.split(":")[2])
 
     rule_repo = TrackingRuleRepository()

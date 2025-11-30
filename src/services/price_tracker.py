@@ -17,11 +17,11 @@ logger = logging.getLogger(__name__)
 class PriceTracker:
     """Сервис для мониторинга цен на подарки."""
 
-    def __init__(self, bot: Bot):
+    def __init__(self, bot: Bot, portals_service: PortalsService = None):
         self.bot = bot
         self.settings = get_settings()
         self.gift_repo = GiftRepository()
-        self.portals_service = PortalsService()
+        self.portals_service = portals_service or PortalsService()
         self._running = False
 
     async def check_prices(self) -> None:
@@ -113,8 +113,6 @@ class PriceTracker:
 
         self._running = True
         logger.info("Price tracker started")
-
-        await self.portals_service.init_auth()
 
         while self._running:
             try:

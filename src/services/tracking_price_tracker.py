@@ -4,12 +4,13 @@ import asyncio
 import logging
 from typing import List, Dict, Any
 from collections import defaultdict
+from datetime import datetime, timedelta
 from aiogram import Bot
 
 from src.config import get_settings
 from src.repositories import TrackingRuleRepository, AlertRepository
 from src.models import TrackingRule, Alert, ConditionType
-from src.services.portals_api_mock import get_mock_api
+from src.services.portals_service import PortalsService
 from src.keyboards import get_alert_keyboard
 
 logger = logging.getLogger(__name__)
@@ -18,13 +19,25 @@ logger = logging.getLogger(__name__)
 class TrackingPriceTracker:
     """Сервис для мониторинга правил отслеживания и отправки алертов."""
 
-    def __init__(self, bot: Bot):
+    def __init__(self, bot: Bot, portals_service: PortalsService = None):
         self.bot = bot
         self.settings = get_settings()
         self.rule_repo = TrackingRuleRepository()
         self.alert_repo = AlertRepository()
-        self.api = get_mock_api()
+        self.api = portals_service or PortalsService()
         self._running = False
+
+        # Rate limiting: не более 3 алертов в минуту для одного пользователя
+        self._user_alert_timestamps: Dict[int, List[datetime]] = defaultdict(list)
+        self._alerts_per_minute_limit = 3
+
+        # Cooldown: после алерта правило "отдыхает" 60 секунд
+        self._rule_cooldowns: Dict[int, datetime] = {}
+        self._rule_cooldown_seconds = 60
+
+        # User pause: пауза всех алертов для пользователя (приоритет интерфейса)
+        self._user_pauses: Dict[int, datetime] = {}
+        self._user_pause_seconds = 15
 
     async def check_all_rules(self) -> None:
         """Проверяет все активные правила отслеживания."""
@@ -82,6 +95,64 @@ class TrackingPriceTracker:
         except Exception as e:
             logger.error(f"Error checking rules for collection '{collection_name}': {e}")
 
+    def _is_rule_on_cooldown(self, rule_id: int) -> bool:
+        """Проверяет, находится ли правило на cooldown."""
+        if rule_id not in self._rule_cooldowns:
+            return False
+
+        cooldown_until = self._rule_cooldowns[rule_id]
+        if datetime.now() < cooldown_until:
+            return True
+
+        # Cooldown истёк, удаляем
+        del self._rule_cooldowns[rule_id]
+        return False
+
+    def _set_rule_cooldown(self, rule_id: int) -> None:
+        """Устанавливает cooldown для правила."""
+        self._rule_cooldowns[rule_id] = datetime.now() + timedelta(seconds=self._rule_cooldown_seconds)
+
+    def _can_send_alert_to_user(self, user_id: int) -> bool:
+        """Проверяет, можно ли отправить алерт пользователю (rate limit)."""
+        now = datetime.now()
+        one_minute_ago = now - timedelta(minutes=1)
+
+        # Очищаем старые timestamps
+        self._user_alert_timestamps[user_id] = [
+            ts for ts in self._user_alert_timestamps[user_id]
+            if ts > one_minute_ago
+        ]
+
+        # Проверяем лимит
+        return len(self._user_alert_timestamps[user_id]) < self._alerts_per_minute_limit
+
+    def _register_alert_sent(self, user_id: int) -> None:
+        """Регистрирует отправленный алерт для rate limiting."""
+        self._user_alert_timestamps[user_id].append(datetime.now())
+
+    def _is_user_paused(self, user_id: int) -> bool:
+        """Проверяет, на паузе ли пользователь (приоритет интерфейса)."""
+        if user_id not in self._user_pauses:
+            return False
+
+        pause_until = self._user_pauses[user_id]
+        if datetime.now() < pause_until:
+            return True
+
+        # Пауза истекла, удаляем
+        del self._user_pauses[user_id]
+        return False
+
+    def pause_user_alerts(self, user_id: int) -> None:
+        """
+        Ставит алерты пользователя на паузу (вызывается из хендлеров).
+
+        Используется для приоритета интерфейса над алертами -
+        когда пользователь нажимает кнопки меню, алерты временно останавливаются.
+        """
+        self._user_pauses[user_id] = datetime.now() + timedelta(seconds=self._user_pause_seconds)
+        logger.info(f"User {user_id} alerts paused for {self._user_pause_seconds}s (UI priority)")
+
     async def _check_single_rule(
         self, rule: TrackingRule, models_floors: Dict[str, float]
     ) -> None:
@@ -93,6 +164,15 @@ class TrackingPriceTracker:
             models_floors: Словарь floor цен по моделям
         """
         try:
+            # ПРИОРИТЕТ ИНТЕРФЕЙСА: проверяем, не на паузе ли пользователь
+            if self._is_user_paused(rule.user_id):
+                logger.debug(f"User {rule.user_id} is paused (UI priority), skipping rule #{rule.rule_id}")
+                return
+
+            # Проверяем cooldown правила
+            if self._is_rule_on_cooldown(rule.rule_id):
+                logger.debug(f"Rule #{rule.rule_id} is on cooldown, skipping")
+                return
             # Вычисляем максимальную цену для поиска
             max_price = self._calculate_max_price(rule, models_floors)
 
@@ -112,7 +192,7 @@ class TrackingPriceTracker:
             # Фильтруем лоты по условиям правила
             matching_lots = []
             for lot in lots:
-                floor_price = models_floors.get(lot["model"], lot.get("floor_price", 0))
+                floor_price = float(models_floors.get(lot["model"], lot.get("floor_price", 0)) or 0)
 
                 if rule.matches_lot(lot["price"], floor_price):
                     # Проверяем, не отправляли ли уже алерт по этому лоту
@@ -124,12 +204,28 @@ class TrackingPriceTracker:
                         matching_lots.append(lot)
 
             # Отправляем алерты для найденных лотов
+            alerts_sent = 0
             for lot in matching_lots[:5]:  # Максимум 5 алертов за раз
-                await self._send_alert(rule, lot, models_floors)
+                # Проверяем rate limit пользователя
+                if not self._can_send_alert_to_user(rule.user_id):
+                    logger.warning(f"Rate limit reached for user {rule.user_id}, stopping alerts")
+                    break
 
-            if matching_lots:
+                # Отправляем алерт асинхронно (не блокируем event loop)
+                asyncio.create_task(self._send_alert(rule, lot, models_floors))
+
+                # Регистрируем отправленный алерт
+                self._register_alert_sent(rule.user_id)
+                alerts_sent += 1
+
+                # Небольшая задержка между алертами, чтобы event loop успевал обрабатывать команды
+                await asyncio.sleep(0.5)
+
+            # Если отправили хотя бы один алерт, устанавливаем cooldown для правила
+            if alerts_sent > 0:
+                self._set_rule_cooldown(rule.rule_id)
                 logger.info(
-                    f"Sent {len(matching_lots[:5])} alerts for rule #{rule.rule_id}"
+                    f"Sent {alerts_sent} alerts for rule #{rule.rule_id}, cooldown set for {self._rule_cooldown_seconds}s"
                 )
 
         except Exception as e:
@@ -153,11 +249,11 @@ class TrackingPriceTracker:
 
         if rule.condition_type == ConditionType.FLOOR_DISCOUNT:
             if rule.model and rule.model in models_floors:
-                floor_price = models_floors[rule.model]
+                floor_price = float(models_floors[rule.model])
             else:
                 # Берём средний floor если модель не указана
                 floor_price = (
-                    sum(models_floors.values()) / len(models_floors)
+                    sum(float(v) for v in models_floors.values()) / len(models_floors)
                     if models_floors
                     else 100
                 )
@@ -182,7 +278,7 @@ class TrackingPriceTracker:
         """
         try:
             # Создаём объект Alert
-            lot_floor_price = models_floors.get(lot["model"], lot.get("floor_price", 0))
+            lot_floor_price = float(models_floors.get(lot["model"], lot.get("floor_price", 0)) or 0)
             # Формат: https://t.me/portals/market?startapp=gift_{id}
             # где id включает UUID и суффикс (например: abc-123_k74zqq)
             lot_url = f"https://t.me/portals/market?startapp=gift_{lot['id']}"
@@ -249,9 +345,6 @@ class TrackingPriceTracker:
 
         self._running = True
         logger.info("Tracking price tracker started")
-
-        # Инициализация API если нужно
-        # await self.api.init_auth()  # Для реального API
 
         while self._running:
             try:

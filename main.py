@@ -6,7 +6,7 @@ import logging
 from src.config import get_settings
 from src.database import get_db_connection, init_database
 from src.bot import create_bot, create_dispatcher
-from src.services import PriceTracker, TrackingPriceTracker
+from src.services import PriceTracker, TrackingPriceTracker, PortalsService
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,13 +32,23 @@ async def main():
     bot = create_bot()
     dp = create_dispatcher()
 
+    # Создаём один общий Portals API сервис (чтобы не было блокировок SQLite сессии)
+    portals_service = PortalsService()
+    bot.portals_service = portals_service  # Сохраняем для доступа из хендлеров
+    logger.info("Portals service created")
+
+    # Инициализируем API один раз перед использованием
+    await portals_service.init_auth()
+    logger.info("Portals service authenticated")
+
     # Запускаем старый price tracker (legacy для gifts)
-    price_tracker = PriceTracker(bot)
+    price_tracker = PriceTracker(bot, portals_service)
     asyncio.create_task(price_tracker.start())
     logger.info("Legacy price tracker started")
 
     # Запускаем новый tracking price tracker (для правил отслеживания)
-    tracking_tracker = TrackingPriceTracker(bot)
+    tracking_tracker = TrackingPriceTracker(bot, portals_service)
+    bot.tracking_tracker = tracking_tracker  # Сохраняем для доступа из хендлеров (приоритет интерфейса)
     asyncio.create_task(tracking_tracker.start())
     logger.info("Tracking price tracker started")
 
