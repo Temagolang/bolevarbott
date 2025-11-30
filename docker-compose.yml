@@ -31,7 +31,7 @@ services:
       DB_PORT: 5432
     volumes:
       # Монтируем файл сессии Pyrogram (важно для авторизации в Portals API)
-      - ./account.session:/app/account.session:ro
+      - ./account.session:/app/account.session
     depends_on:
       postgres:
         condition: service_healthy
