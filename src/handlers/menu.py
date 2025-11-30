@@ -92,6 +92,13 @@ async def show_my_trackings(user_id: int, username: str, message: Message, callb
         # Получаем user_id всех членов группы
         group_user_ids = user_cache.get_group_user_ids(username) if username else [user_id]
 
+        # Если кэш пуст - используем текущего пользователя
+        if not group_user_ids:
+            group_user_ids = [user_id]
+        elif user_id not in group_user_ids:
+            # Убедимся что текущий пользователь в списке
+            group_user_ids.append(user_id)
+
         # Получаем правила всей группы
         rules = await rule_repo.get_by_user_ids(group_user_ids)
 
