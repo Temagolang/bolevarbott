@@ -79,6 +79,29 @@ class TrackingRuleRepository:
             logger.error(f"Failed to fetch rules for user {user_id}: {e}")
             raise
 
+    async def get_by_user_ids(self, user_ids: List[int], active_only: bool = False) -> List[TrackingRule]:
+        """
+        Получает правила для списка пользователей (для группы).
+
+        Args:
+            user_ids: Список ID пользователей
+            active_only: Если True, возвращает только активные правила
+        """
+        if not user_ids:
+            return []
+
+        if active_only:
+            query = "SELECT * FROM tracking_rules WHERE user_id = ANY($1) AND is_active = TRUE ORDER BY created_at DESC"
+        else:
+            query = "SELECT * FROM tracking_rules WHERE user_id = ANY($1) ORDER BY created_at DESC"
+
+        try:
+            rows = await self.db.pool.fetch(query, user_ids)
+            return [TrackingRule.from_db_row(dict(row)) for row in rows]
+        except Exception as e:
+            logger.error(f"Failed to fetch rules for user group: {e}")
+            raise
+
     async def get_all_active(self) -> List[TrackingRule]:
         """Получает все активные правила (для Price Tracker)."""
         query = "SELECT * FROM tracking_rules WHERE is_active = TRUE"

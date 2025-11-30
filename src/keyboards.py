@@ -14,11 +14,10 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_search_type_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура выбора типа поиска коллекции."""
+    """Клавиатура для начала поиска коллекции."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📚 По коллекции", callback_data="search:by_collection")],
-            [InlineKeyboardButton(text="🔍 По имени подарка", callback_data="search:by_name")],
+            [InlineKeyboardButton(text="🔍 Поиск по названию", callback_data="search:by_collection")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="menu:main")],
         ]
     )
@@ -82,8 +81,9 @@ def get_model_selection_keyboard(back_callback: str = "add:skip_model") -> Inlin
     """Клавиатура для выбора модели."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Выбрать из списка", callback_data="add:select_model")],
-            [InlineKeyboardButton(text="Пропустить", callback_data="add:skip_model")],
+            [InlineKeyboardButton(text="✍️ Ввести имя модели", callback_data="add:enter_model")],
+            [InlineKeyboardButton(text="📋 Выбрать из списка", callback_data="add:select_model")],
+            [InlineKeyboardButton(text="⏭ Пропустить (любая модель)", callback_data="add:skip_model")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data=back_callback)],
             [InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:main")],
         ]

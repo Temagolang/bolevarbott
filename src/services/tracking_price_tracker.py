@@ -11,6 +11,7 @@ from src.config import get_settings
 from src.repositories import TrackingRuleRepository, AlertRepository
 from src.models import TrackingRule, Alert, ConditionType
 from src.services.portals_service import PortalsService
+from src.services.user_cache import get_user_cache
 from src.keyboards import get_alert_keyboard
 
 logger = logging.getLogger(__name__)
@@ -269,7 +270,7 @@ class TrackingPriceTracker:
         self, rule: TrackingRule, lot: Dict[str, Any], models_floors: Dict[str, float]
     ) -> None:
         """
-        Создаёт и отправляет алерт пользователю.
+        Создаёт и отправляет алерт пользователю и всем членам его группы.
 
         Args:
             rule: Правило отслеживания
@@ -303,36 +304,55 @@ class TrackingPriceTracker:
             message_text = alert.format_message()
             keyboard = get_alert_keyboard(lot_url, rule.rule_id)
 
-            # Отправляем пользователю
-            if lot.get("photo_url"):
+            # Получаем всех членов группы пользователя
+            user_cache = get_user_cache()
+            group_user_ids = user_cache.get_group_user_ids_by_user_id(rule.user_id)
+
+            logger.info(f"Sending alert to {len(group_user_ids)} users in group")
+
+            # Отправляем алерт каждому члену группы
+            for target_user_id in group_user_ids:
+                # Проверяем, не на паузе ли пользователь
+                if self._is_user_paused(target_user_id):
+                    logger.debug(f"User {target_user_id} is paused, skipping alert")
+                    continue
+
                 try:
-                    await self.bot.send_photo(
-                        chat_id=rule.user_id,
-                        photo=lot["photo_url"],
-                        caption=message_text,
-                        reply_markup=keyboard,
-                        parse_mode="Markdown",
-                    )
+                    # Отправляем пользователю
+                    if lot.get("photo_url"):
+                        try:
+                            await self.bot.send_photo(
+                                chat_id=target_user_id,
+                                photo=lot["photo_url"],
+                                caption=message_text,
+                                reply_markup=keyboard,
+                                parse_mode="Markdown",
+                            )
+                        except Exception as e:
+                            logger.error(f"Error sending photo to user {target_user_id}: {e}")
+                            await self.bot.send_message(
+                                chat_id=target_user_id,
+                                text=message_text,
+                                reply_markup=keyboard,
+                                parse_mode="Markdown",
+                            )
+                    else:
+                        await self.bot.send_message(
+                            chat_id=target_user_id,
+                            text=message_text,
+                            reply_markup=keyboard,
+                            parse_mode="Markdown",
+                        )
+
+                    logger.info(f"Alert sent to user {target_user_id}")
+
                 except Exception as e:
-                    logger.error(f"Error sending photo: {e}")
-                    await self.bot.send_message(
-                        chat_id=rule.user_id,
-                        text=message_text,
-                        reply_markup=keyboard,
-                        parse_mode="Markdown",
-                    )
-            else:
-                await self.bot.send_message(
-                    chat_id=rule.user_id,
-                    text=message_text,
-                    reply_markup=keyboard,
-                    parse_mode="Markdown",
-                )
+                    logger.error(f"Error sending alert to user {target_user_id}: {e}")
 
             # Отмечаем как отправленный
             await self.alert_repo.mark_as_sent(alert_id)
 
-            logger.info(f"Alert sent: rule #{rule.rule_id}, lot {lot['id']}, user {rule.user_id}")
+            logger.info(f"Alert sent: rule #{rule.rule_id}, lot {lot['id']}, group size {len(group_user_ids)}")
 
         except Exception as e:
             logger.error(f"Error sending alert: {e}", exc_info=True)

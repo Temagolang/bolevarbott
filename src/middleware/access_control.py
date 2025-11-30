@@ -7,6 +7,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery
 
 from src.config import get_settings
+from src.services.user_cache import get_user_cache
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,7 @@ class AccessControlMiddleware(BaseMiddleware):
     def __init__(self):
         self.settings = get_settings()
         self.allowed_users = self.settings.allowed_users
+        self.user_cache = get_user_cache()
         super().__init__()
 
     async def __call__(
@@ -37,7 +39,8 @@ class AccessControlMiddleware(BaseMiddleware):
 
         # Проверяем доступ
         if username and username in self.allowed_users:
-            # Разрешённый пользователь - пропускаем
+            # Разрешённый пользователь - кэшируем и пропускаем
+            self.user_cache.add_user(username, user.id)
             logger.info(f"Access granted for user @{username} (id: {user.id})")
             return await handler(event, data)
         else:

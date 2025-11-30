@@ -28,6 +28,7 @@ class Settings:
 
     # Access Control
     allowed_users: list[str] = None  # Список разрешённых username
+    user_groups: dict[str, str] = None  # Группы пользователей {username: group_id}
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -42,6 +43,13 @@ class Settings:
         allowed_users_str = os.getenv("ALLOWED_USERS", "")
         allowed_users = [u.strip() for u in allowed_users_str.split(",") if u.strip()] if allowed_users_str else []
 
+        # Создаём группы пользователей (пока хардкод для FCK_HOTLINE и maggmogg)
+        # В будущем можно вынести в .env как USER_GROUPS=group1:user1,user2;group2:user3
+        user_groups = {
+            "FCK_HOTLINE": "team1",
+            "maggmogg": "team1",
+        }
+
         return cls(
             bot_token=os.getenv("BOT_TOKEN", ""),
             api_id=int(os.getenv("API_ID", "0")),
@@ -54,7 +62,23 @@ class Settings:
             price_check_interval=int(os.getenv("PRICE_CHECK_INTERVAL", "60")),
             use_mock_api=os.getenv("USE_MOCK_API", "true").lower() == "true",
             allowed_users=allowed_users if allowed_users else None,
+            user_groups=user_groups,
         )
+
+    def get_user_group(self, username: str) -> Optional[str]:
+        """Возвращает ID группы пользователя или None."""
+        if not self.user_groups:
+            return None
+        return self.user_groups.get(username)
+
+    def get_group_members(self, username: str) -> list[str]:
+        """Возвращает всех пользователей из группы данного пользователя."""
+        group_id = self.get_user_group(username)
+        if not group_id or not self.user_groups:
+            return [username]  # Если нет группы, возвращаем только себя
+
+        # Находим всех пользователей с таким же group_id
+        return [user for user, gid in self.user_groups.items() if gid == group_id]
 
 
 _settings: Optional[Settings] = None

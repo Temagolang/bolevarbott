@@ -12,6 +12,7 @@ from src.keyboards import (
     get_delete_confirmation_keyboard,
 )
 from src.repositories import TrackingRuleRepository, AlertRepository
+from src.services.user_cache import get_user_cache
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +60,8 @@ async def menu_main(callback: CallbackQuery):
 
 @router.message(Command("my"))
 async def cmd_my_trackings(message: Message):
-    """Команда /my - список правил пользователя."""
-    await show_my_trackings(message.from_user.id, message)
+    """Команда /my - список правил пользователя и его группы."""
+    await show_my_trackings(message.from_user.id, message.from_user.username, message)
 
 
 @router.callback_query(F.data == "menu:my_trackings")
@@ -71,22 +72,28 @@ async def menu_my_trackings(callback: CallbackQuery):
     if hasattr(bot, 'tracking_tracker'):
         bot.tracking_tracker.pause_user_alerts(callback.from_user.id)
 
-    await show_my_trackings(callback.from_user.id, callback.message, callback)
+    await show_my_trackings(callback.from_user.id, callback.from_user.username, callback.message, callback)
 
 
-async def show_my_trackings(user_id: int, message: Message, callback: CallbackQuery = None):
+async def show_my_trackings(user_id: int, username: str, message: Message, callback: CallbackQuery = None):
     """
-    Показывает список правил отслеживания пользователя.
+    Показывает список правил отслеживания пользователя и его группы.
 
     Args:
         user_id: ID пользователя
+        username: Username пользователя
         message: Объект сообщения
         callback: Объект callback (если вызов через inline кнопку)
     """
     rule_repo = TrackingRuleRepository()
+    user_cache = get_user_cache()
 
     try:
-        rules = await rule_repo.get_by_user(user_id)
+        # Получаем user_id всех членов группы
+        group_user_ids = user_cache.get_group_user_ids(username) if username else [user_id]
+
+        # Получаем правила всей группы
+        rules = await rule_repo.get_by_user_ids(group_user_ids)
 
         if not rules:
             text = (
@@ -95,7 +102,12 @@ async def show_my_trackings(user_id: int, message: Message, callback: CallbackQu
             )
             keyboard = get_back_to_main_keyboard()
         else:
-            text = "📋 Твои правила отслеживания:\n\n"
+            # Если в группе несколько человек, показываем это
+            is_group = len(group_user_ids) > 1
+            if is_group:
+                text = "📋 Правила отслеживания вашей команды:\n\n"
+            else:
+                text = "📋 Твои правила отслеживания:\n\n"
 
             # Формируем список правил с эмодзи
             for idx, rule in enumerate(rules, 1):
